@@ -22,6 +22,7 @@ def get_packets(context):
         ClientSettingsPacket,
         PluginMessagePacket,
         PlayerBlockPlacementPacket,
+        DiggingPacket
     }
     if context.protocol_version >= 69:
         packets |= {
@@ -251,3 +252,16 @@ class UseItemPacket(Packet):
         {'hand': VarInt}])
 
     Hand = RelativeHand
+
+class DiggingPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        print(context.protocol_version)
+        return 0x14
+
+    packet_name = "player digging"
+    definition = [
+        {'status': VarInt},
+        {'location' : Position},
+        {'face': Byte}]
+        

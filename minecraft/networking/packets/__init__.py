@@ -59,6 +59,7 @@ from .serverbound.play import ChatPacket
 from .serverbound.play import PositionAndLookPacket
 from .serverbound.play import TeleportConfirmPacket
 from .serverbound.play import AnimationPacket as AnimationPacketServerbound
+from .serverbound.play import DiggingPacket
 from .serverbound.play import get_packets as state_playing_serverbound
 
 __all_legacy_packets__ = (
@@ -76,7 +77,7 @@ __all_legacy_packets__ = (
     MapPacket, state_playing_clientbound, ChatPacket,
     PositionAndLookPacket, TeleportConfirmPacket,
     AnimationPacketServerbound, state_playing_serverbound,
-    KeepAlivePacket,
+    KeepAlivePacket, DiggingPacket,
 )
 
 __all_other__ = (

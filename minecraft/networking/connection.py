@@ -638,6 +638,7 @@ class PacketReactor(object):
                     packet_data.reset_cursor()
 
             packet_id = VarInt.read(packet_data)
+            
 
             # If we know the structure of the packet, attempt to parse it
             # otherwise just skip it
@@ -645,9 +646,12 @@ class PacketReactor(object):
                 packet = self.clientbound_packets[packet_id]()
                 packet.context = self.connection.context
                 packet.read(packet_data)
+                packet.packet_id = packet_id
                 return packet
             else:
-                return packets.Packet(context=self.connection.context)
+                packet = packets.Packet(context=self.connection.context)
+                packet.packet_id = packet_id
+                return packet
         else:
             return None
 
