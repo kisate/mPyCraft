@@ -73,7 +73,62 @@ class ChunkDataPacket(Packet):
                                     blocks_in_section.append(y)
                     self.blocks_in_chunk = list(set(self.blocks_in_chunk) | set(blocks_in_section))
             # print(self.blocks_in_chunk)
-            
+        def read_data(self, data, dimension):
+            with open('temp.txt', 'wb') as f:
+                f.write(data)
+            with open('temp.txt', 'rb') as file_object:
+                for i in range(16):
+                    if self.bitmask & (1 << i):
+                        bits_per_block = UnsignedByte.read(file_object)
+                        palette = None
+                        if bits_per_block < GLOBAL_BITS_PER_BLOCK:
+                            palette_length = VarInt.read(file_object)
+                            palette = []
+                            for _ in range(palette_length):
+                                palette.append(VarInt.read(file_object) // 16)
+
+                        section = ChunkDataPacket.ChunkSection()
+
+                        data_length = VarInt.read(file_object)
+                        data = []
+                        for _ in range(data_length):
+                            part = file_object.read(8)
+                            data.append(int.from_bytes(part, 'big'))
+                        section.data = data
+                        section.palette = palette
+                        
+                        block_mask = (1 << bits_per_block) - 1
+                        
+                        # print(i)
+
+                        for y in range(16):
+                            for z in range(16):
+                                for x in range(16):
+                                    block_mask = (1 << bits_per_block) - 1
+                                    number = (((y << 4) + z) << 4) + x
+                                    long_number = (number*bits_per_block) >> 6
+                                    bit_in_long_number = (number*bits_per_block) & 63
+                                    block = (data[long_number] >> bit_in_long_number) & (block_mask)
+                                    if bit_in_long_number + bits_per_block > 64:
+                                        block |= (data[long_number + 1] & ((1 << (bit_in_long_number + bits_per_block - 64)) - 1)) << (64 - bit_in_long_number)
+                                    if palette:
+                                        # if block > 0:
+                                        #     print(palette)
+                                        #     print(len(palette))
+                                        #     print(block)
+                                        #     print(bits_per_block)
+                                        #     print((x, y, z, self.x, self.z))
+                                        block = palette[block]
+                        
+                                    section.blocks[x][y][z] = block
+                            
+                        section.light = file_object.read(2048)
+                        if dimension == 0:
+                            section.sky_light = file_object.read(2048)
+
+                        self.sections[i] = section
+                    
+            self.update_blocks()
 
         def __repr__(self):
             return 'chunk_x={}, chunk_z={}, blocks_in_chunk={}'.format(self.x, self.z, self.blocks_in_chunk)
@@ -86,44 +141,13 @@ class ChunkDataPacket(Packet):
         self.gu_continuous = Boolean.read(file_object)
         self.bitmask = VarInt.read(file_object)
         self.data_length = VarInt.read(file_object)
+        self.data = file_object.read(self.data_length)
         self.chunk = ChunkDataPacket.Chunk(self.x, self.z, self.gu_continuous, self.bitmask)
+        self.entity_data_length = VarInt.read(file_object)
+        self.entitity_data = file_object.read(self.entity_data_length) #TODO
 
-        for i in range(16):
-            if self.bitmask & (1 << i):
-                bits_per_block = UnsignedByte.read(file_object)
-                palette = None
-                if bits_per_block < GLOBAL_BITS_PER_BLOCK:
-                    palette_length = VarInt.read(file_object)
-                    palette = []
-                    for _ in range(palette_length):
-                        palette.append(VarInt.read(file_object) // 16)
-
-                section = ChunkDataPacket.ChunkSection()
-
-                data_length = VarInt.read(file_object)
-                data = b''
-                for _ in range(data_length):
-                    part = file_object.read(8)
-                    data += part
-                section.data = data
-                section.palette = palette
-                data = int.from_bytes(data, byteorder='big')
-                
-                for y in range(16):
-                    for z in range(16):
-                        for x in range(16):
-                            block = data & ((1 << bits_per_block) - 1)
-                            data = data >> bits_per_block
-                            if palette is not None:
-                                block = palette[block]
-                
-                            section.blocks[x][15 - y][15 - z] = block
-
-                self.chunk.sections[i] = section
-                
-        self.chunk.update_blocks()
             # print(self.chunk.blocks_in_chunk)
                 # print(s.data)
         # if len(self.chunk.blocks_in_chunk) > 1 : print(self.chunk.blocks_in_chunk)
-        self.entities = VarIntPrefixedByteArray.read(file_object)
+        
         # print('Reading chunk packet... Done')
