@@ -18,6 +18,7 @@ from .explosion_packet import ExplosionPacket
 from .sound_effect_packet import SoundEffectPacket
 from .face_player_packet import FacePlayerPacket
 from .chunk_data_packet import ChunkDataPacket
+from .inventory_packets import SetSlotPacket
 
 
 # Formerly known as state_playing_clientbound.
@@ -43,7 +44,8 @@ def get_packets(context):
         PluginMessagePacket,
         PlayerListHeaderAndFooterPacket,
         EntityLookPacket,
-        ChunkDataPacket
+        ChunkDataPacket,
+        SetSlotPacket
     }
     if context.protocol_version <= 47:
         packets |= {
