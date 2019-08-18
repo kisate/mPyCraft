@@ -41,15 +41,21 @@ class ChunkDataPacket(Packet):
             self.entities = []
             self.blocks_in_chunk = [] #IDs that are in chunk
 
-        def get_block(self, x, y, z):
+        def get_block(self, x, y, z, relative=False):
             section_number = y // 16
             section = self.sections[section_number]
-            return section.blocks[x - self.x*16][y % 16][z - self.z*16]
+            if relative:
+                return section.blocks[x][y % 16][z]
+            else:
+                return section.blocks[x - self.x*16][y % 16][z - self.z*16]
 
-        def update_block(self, x, y, z, data):
+        def update_block(self, x, y, z, data, relative=True):
             section_number = y // 16
             section = self.sections[section_number]
-            section.update_block(x - self.x*16, y % 16, z - self.z*16, data)
+            if relative:
+                section.update_block(x, y % 16, z, data)
+            else:
+                section.update_block(x - self.x*16, y % 16, z - self.z*16, data)
             self.sections[section_number] = section
             self.update_blocks()
 
@@ -57,7 +63,7 @@ class ChunkDataPacket(Packet):
             for record in records:
                 section_number = record.y // 16
                 section = self.sections[section_number]
-                section.update_block(record.x, record.y, record.z, record.blockId)
+                section.update_block(record.x, record.y % 16, record.z, record.blockId)
                 self.sections[section_number] = section
             self.update_blocks()
         
