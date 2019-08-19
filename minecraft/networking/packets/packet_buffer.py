@@ -26,3 +26,6 @@ class PacketBuffer(object):
 
     def get_writable(self):
         return self.bytes.getvalue()
+
+    def close(self):
+        return

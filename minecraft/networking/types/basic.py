@@ -3,10 +3,12 @@ Each type has a method which is used to read and write it.
 These definitions and methods are used by the packet definitions
 """
 from __future__ import division
+from nbt import nbt
 import struct
 import uuid
+from io import BytesIO
 
-from .utility import Vector
+from .utility import Vector, MutableRecord
 
 
 __all__ = (
@@ -14,7 +16,7 @@ __all__ = (
     'Integer', 'FixedPointInteger', 'Angle', 'VarInt', 'Long',
     'UnsignedLong', 'Float', 'Double', 'ShortPrefixedByteArray',
     'VarIntPrefixedByteArray', 'TrailingByteArray', 'String', 'UUID',
-    'Position',
+    'Position', 'Slot'
 )
 
 
@@ -324,3 +326,47 @@ class Position(Type, Vector):
                  if context.protocol_version >= 443 else
                  (x & 0x3FFFFFF) << 38 | (y & 0xFFF) << 26 | (z & 0x3FFFFFF))
         UnsignedLong.send(value, socket)
+
+
+class Slot(Type, MutableRecord):
+    __slots__ = 'item_id', 'item_count', 'item_damage', 'nbt_data'
+
+    def __init__(self, item_id=-1, item_count=None, item_damage=None, nbt_data=None):
+        self.item_id = item_id
+        if self.item_id != -1:
+            self.item_count = item_count
+            self.item_damage = item_damage
+            self.nbt_data = nbt_data
+
+    @staticmethod
+    def read(file_object):
+        item_id = Short.read(file_object)
+        item_count = None
+        item_damage = None
+        nbt_data = None
+        try: 
+            if item_id != -1:
+                item_count = Byte.read(file_object)
+                item_damage = Short.read(file_object)
+                nbt_data = nbt.NBTFile(buffer=file_object)
+        except nbt.MalformedFileError as e:
+            pass
+        return Slot(item_id, item_count, item_damage, nbt_data)
+
+    @staticmethod
+    def send(value, socket):
+        Short.send(value.item_id, socket)
+        if value.item_id != -1:
+            Byte.send(value.item_count, socket)
+            Short.send(value.item_damage, socket)
+            if value.nbt_data is None:
+                Byte.send(0, socket)
+            else:
+                buffer = BytesIO()
+                if not buffer:
+                    print(buffer)
+                value.nbt_data.write_file(buffer=buffer)
+                buffer.seek(0)
+                socket.send(buffer.getvalue())
+
+

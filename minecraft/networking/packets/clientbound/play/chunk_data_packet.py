@@ -1,5 +1,5 @@
 from minecraft.networking.packets import (
-    Packet, AbstractKeepAlivePacket, AbstractPluginMessagePacket
+    Packet, AbstractKeepAlivePacket, AbstractPluginMessagePacket, PacketBuffer
 )
 
 from minecraft.networking.types import (
@@ -9,7 +9,11 @@ from minecraft.networking.types import (
     VarIntPrefixedByteArray, MutableRecord, Long
 )
 
+from minecraft.networking.types import mynbt
+
+
 import numpy
+
 
 GLOBAL_BITS_PER_BLOCK = 14 #TODO
 
@@ -20,9 +24,9 @@ class ChunkDataPacket(Packet):
 
     packet_name = 'chunk_data'
     class ChunkSection(MutableRecord):
-        __slots__ = 'blocks', 'light', 'sky_light', 'palette', 'data'
+        __slots__ = 'blocks', 'light', 'sky_light', 'palette', 'data', 'block_metas'
         def __init__(self):
-            self.blocks = numpy.zeros([16, 16, 16]).tolist()
+            self.blocks = numpy.full([16, 16, 16], 0).tolist()
             self.light = []
             self.sky_light = []
             self.data = None
@@ -45,9 +49,17 @@ class ChunkDataPacket(Packet):
             section_number = y // 16
             section = self.sections[section_number]
             if relative:
-                return section.blocks[x][y % 16][z]
+                return section.blocks[x][y % 16][z] >> 4
             else:
-                return section.blocks[x - self.x*16][y % 16][z - self.z*16]
+                return section.blocks[x - self.x*16][y % 16][z - self.z*16] >> 4
+
+        def get_block_with_meta(self, x, y, z, relative=False):
+            section_number = y // 16
+            section = self.sections[section_number]
+            if relative:
+                return (section.blocks[x][y % 16][z] >> 4, section.blocks[x][y % 16][z] & 15)
+            else:
+                return (section.blocks[x - self.x*16][y % 16][z - self.z*16] >> 4, section.blocks[x - self.x*16][y % 16][z - self.z*16] & 15)
 
         def update_block(self, x, y, z, data, relative=True):
             section_number = y // 16
@@ -63,7 +75,7 @@ class ChunkDataPacket(Packet):
             for record in records:
                 section_number = record.y // 16
                 section = self.sections[section_number]
-                section.update_block(record.x, record.y % 16, record.z, record.blockId)
+                section.update_block(record.x, record.y % 16, record.z, record.block_state_id)
                 self.sections[section_number] = section
             self.update_blocks()
         
@@ -80,60 +92,61 @@ class ChunkDataPacket(Packet):
                     self.blocks_in_chunk = list(set(self.blocks_in_chunk) | set(blocks_in_section))
             # print(self.blocks_in_chunk)
         def read_data(self, data, dimension):
-            with open('temp.txt', 'wb') as f:
-                f.write(data)
-            with open('temp.txt', 'rb') as file_object:
-                for i in range(16):
-                    if self.bitmask & (1 << i):
-                        bits_per_block = UnsignedByte.read(file_object)
-                        palette = None
-                        if bits_per_block < GLOBAL_BITS_PER_BLOCK:
-                            palette_length = VarInt.read(file_object)
-                            palette = []
-                            for _ in range(palette_length):
-                                palette.append(VarInt.read(file_object) // 16)
+            file_object = PacketBuffer()
+            file_object.send(data)
+            file_object.reset_cursor()
+            for i in range(16):
+                if self.bitmask & (1 << i):
+                    bits_per_block = UnsignedByte.read(file_object)
+                    palette = None
+                    if bits_per_block < GLOBAL_BITS_PER_BLOCK:
+                        palette_length = VarInt.read(file_object)
+                        palette = []
+                        for _ in range(palette_length):
+                            palette.append(VarInt.read(file_object))
 
-                        section = ChunkDataPacket.ChunkSection()
+                    section = ChunkDataPacket.ChunkSection()
 
-                        data_length = VarInt.read(file_object)
-                        data = []
-                        for _ in range(data_length):
-                            part = file_object.read(8)
-                            data.append(int.from_bytes(part, 'big'))
-                        section.data = data
-                        section.palette = palette
-                        
-                        block_mask = (1 << bits_per_block) - 1
-                        
-                        # print(i)
-
-                        for y in range(16):
-                            for z in range(16):
-                                for x in range(16):
-                                    block_mask = (1 << bits_per_block) - 1
-                                    number = (((y << 4) + z) << 4) + x
-                                    long_number = (number*bits_per_block) >> 6
-                                    bit_in_long_number = (number*bits_per_block) & 63
-                                    block = (data[long_number] >> bit_in_long_number) & (block_mask)
-                                    if bit_in_long_number + bits_per_block > 64:
-                                        block |= (data[long_number + 1] & ((1 << (bit_in_long_number + bits_per_block - 64)) - 1)) << (64 - bit_in_long_number)
-                                    if palette:
-                                        # if block > 0:
-                                        #     print(palette)
-                                        #     print(len(palette))
-                                        #     print(block)
-                                        #     print(bits_per_block)
-                                        #     print((x, y, z, self.x, self.z))
-                                        block = palette[block]
-                        
-                                    section.blocks[x][y][z] = block
-                            
-                        section.light = file_object.read(2048)
-                        if dimension == 0:
-                            section.sky_light = file_object.read(2048)
-
-                        self.sections[i] = section
+                    data_length = VarInt.read(file_object)
+                    data = []
+                    for _ in range(data_length):
+                        part = file_object.read(8)
+                        data.append(int.from_bytes(part, 'big'))
+                    section.data = data
+                    section.palette = palette
                     
+                    block_mask = (1 << bits_per_block) - 1
+                    
+                    # print(i)
+
+                    for y in range(16):
+                        for z in range(16):
+                            for x in range(16):
+                                block_mask = (1 << bits_per_block) - 1
+                                number = (((y << 4) + z) << 4) + x
+                                long_number = (number*bits_per_block) >> 6
+                                bit_in_long_number = (number*bits_per_block) & 63
+                                block = (data[long_number] >> bit_in_long_number) & (block_mask)
+                                if bit_in_long_number + bits_per_block > 64:
+                                    block |= (data[long_number + 1] & ((1 << (bit_in_long_number + bits_per_block - 64)) - 1)) << (64 - bit_in_long_number)
+                                if palette:
+                                    # if block > 0:
+                                    #     print(palette)
+                                    #     print(len(palette))
+                                    #     print(block)
+                                    #     print(bits_per_block)
+                                    #     print((x, y, z, self.x, self.z))
+                                    block = palette[block]
+
+                                if type(block) is float:
+                                    print(block)
+
+                                section.blocks[x][y][z] = block
+                        
+                    section.light = file_object.read(2048)
+                    if dimension == 0:
+                        section.sky_light = file_object.read(2048)
+                    self.sections[i] = section
             self.update_blocks()
 
         def __repr__(self):
@@ -149,8 +162,10 @@ class ChunkDataPacket(Packet):
         self.data_length = VarInt.read(file_object)
         self.data = file_object.read(self.data_length)
         self.chunk = ChunkDataPacket.Chunk(self.x, self.z, self.gu_continuous, self.bitmask)
-        self.entity_data_length = VarInt.read(file_object)
-        self.entitity_data = file_object.read(self.entity_data_length) #TODO
+
+        self.number_of_entities = VarInt.read(file_object)
+        for _ in range(self.number_of_entities):
+            self.chunk.entities.append(mynbt.parse_bytes(file_object))
 
             # print(self.chunk.blocks_in_chunk)
                 # print(s.data)

@@ -10,32 +10,26 @@ from minecraft.networking.types import (
 
 from minecraft.networking.types.utility import MutableRecord
 
-from minecraft.networking.types import mynbt
+from minecraft.networking.types import Slot
 
-class Slot(MutableRecord):
-    __slots__ = 'item_id', 'item_count', 'item_damage', 'nbt_data'
+from nbt import nbt
 
-    def __init__(self, item_id=None, item_count=None, item_damage=None, nbt_data=None):
-        self.item_id = item_id
-        if self.item_id != -1:
-            self.item_count = item_count
-            self.item_damage = item_damage
-            self.nbt_data = nbt_data
+WINDOW_SIZES = {
+    0 : 46,
+}
 
+class WindowItemsPacket(Packet):
     @staticmethod
-    def read(file_object, read_all=True):
-        item_id = Short.read(file_object)
-        item_count = None
-        item_damage = None
-        nbt_data = None
-        try: 
-            if item_id != -1 and read_all:
-                item_count = Byte.read(file_object)
-                item_damage = Short.read(file_object)
-                nbt_data = mynbt.parse_bytes(file_object)
-        except BaseException as e:
-            print(e)
-        return Slot(item_id, item_count, item_damage, nbt_data)
+    def get_id(context):
+        return 0x14
+
+    packet_name = "window items"
+    def read(self, file_object):
+        self.window_id = UnsignedByte.read(file_object)
+        self.count = Short.read(file_object)
+        self.slots = [Slot(-1)]*self.count
+        for slot_number in range(self.count):
+            self.slots[slot_number] = Slot.read(file_object)
 
 class SetSlotPacket(Packet):
     @staticmethod
@@ -43,7 +37,30 @@ class SetSlotPacket(Packet):
         return 0x16
 
     packet_name = "set slot"
-    def read(self, file_object):
-        self.window_id = Byte.read(file_object)
-        self.slot = Short.read(file_object)
-        self.slot_data = Slot.read(file_object)
+    definition = [
+        {'window_id' : Byte},
+        {'slot' : Short},
+        {'slot_data' : Slot}
+    ]
+
+class ConfirmTransactionPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x11
+
+    packet_name = 'confirm transaction cb'
+    definition = [
+        {'window_id' : Byte},
+        {'action_number' : Short},
+        {'accepted' : Boolean}
+    ]
+    
+class HeldItemChangePacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x3A
+    
+    packet_name = 'held item change cb'
+    definition = [
+        {'slot' : Byte}
+    ]
