@@ -48,7 +48,10 @@ def get_packets(context):
         SetSlotPacket,
         WindowItemsPacket,
         ConfirmTransactionPacket,
-        HeldItemChangePacket
+        HeldItemChangePacket,
+        EntityLookAndRelativeMovePacket,
+        EntityRelativeMovePacket,
+        EntityTeleportPacket
     }
     if context.protocol_version <= 47:
         packets |= {
@@ -327,4 +330,50 @@ class EntityLookPacket(Packet):
         {'yaw': Angle},
         {'pitch': Angle},
         {'on_ground': Boolean}
+    ]
+
+class EntityLookAndRelativeMovePacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x27
+    
+    packet_name = 'entity relative move and look'
+    definition = [
+        {'entity_id' : VarInt},
+        {'delta_x' : Short},
+        {'delta_y' : Short},
+        {'delta_z' : Short},
+        {'yaw' : Angle},
+        {'pitch' : Angle},
+        {'on_ground' : Boolean}
+    ]
+
+class EntityRelativeMovePacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x26
+    
+    packet_name = 'entity relative move'
+    definition = [
+        {'entity_id' : VarInt},
+        {'delta_x' : Short},
+        {'delta_y' : Short},
+        {'delta_z' : Short},
+        {'on_ground' : Boolean}
+    ]
+
+class EntityTeleportPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x4C
+    
+    packet_name = 'entity teleport'
+    definition = [
+        {'entity_id' : VarInt},
+        {'x' : Double},
+        {'y' : Double},
+        {'z' : Double},
+        {'yaw' : Angle},
+        {'pitch' : Angle},
+        {'on_ground' : Boolean}
     ]
